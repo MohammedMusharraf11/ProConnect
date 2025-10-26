@@ -50,10 +50,12 @@ exports.getSentRequests = async (req, res) => {
   try {
     const userId = req.userId;
     
+    console.log('Getting sent requests for user:', userId);
+    
     const [requests] = await db.query(
-      `SELECT c.CONNECTION_ID, c.REQUESTED_AT, 
+      `SELECT c.CONNECTION_ID, c.REQUESTED_AT, c.STATUS,
        u.USER_ID, u.F_NAME, u.L_NAME, u.HEADLINE, 
-       u.PROFILE_PIC_URL
+       u.PROFILE_PIC_URL, u.CITY, u.COUNTRY
        FROM CONNECTIONS c
        JOIN USERS u ON c.RECEIVER_ID = u.USER_ID
        WHERE c.REQUEST_ID = ? AND c.STATUS = 'pending'
@@ -61,8 +63,11 @@ exports.getSentRequests = async (req, res) => {
       [userId]
     );
     
+    console.log('Found sent requests:', requests.length);
+    
     res.json(requests);
   } catch (error) {
+    console.error('Error getting sent requests:', error);
     res.status(500).json({ error: error.message });
   }
 };
@@ -96,18 +101,43 @@ exports.sendConnectionRequest = async (req, res) => {
     const { receiverId } = req.body;
     const requesterId = req.userId;
     
+    // Validate receiverId
+    if (!receiverId || receiverId == requesterId) {
+      return res.status(400).json({ 
+        error: 'Invalid receiver ID' 
+      });
+    }
+    
     // Check if connection already exists
     const [existing] = await db.query(
-      `SELECT * FROM CONNECTIONS 
+      `SELECT STATUS FROM CONNECTIONS 
        WHERE (REQUEST_ID = ? AND RECEIVER_ID = ?)
        OR (REQUEST_ID = ? AND RECEIVER_ID = ?)`,
       [requesterId, receiverId, receiverId, requesterId]
     );
     
     if (existing.length > 0) {
-      return res.status(400).json({ 
-        error: 'Connection request already exists' 
-      });
+      const status = existing[0].STATUS;
+      if (status === 'pending') {
+        return res.status(400).json({ 
+          error: 'Connection request already pending' 
+        });
+      } else if (status === 'accepted') {
+        return res.status(400).json({ 
+          error: 'Already connected' 
+        });
+      } else if (status === 'rejected') {
+        // Allow re-sending after rejection
+        await db.query(
+          `UPDATE CONNECTIONS SET STATUS = 'pending', REQUESTED_AT = NOW() 
+           WHERE (REQUEST_ID = ? AND RECEIVER_ID = ?)
+           OR (REQUEST_ID = ? AND RECEIVER_ID = ?)`,
+          [requesterId, receiverId, receiverId, requesterId]
+        );
+        return res.status(200).json({
+          message: 'Connection request sent'
+        });
+      }
     }
     
     const [result] = await db.query(
@@ -120,6 +150,7 @@ exports.sendConnectionRequest = async (req, res) => {
       connectionId: result.insertId
     });
   } catch (error) {
+    console.error('Send connection error:', error);
     res.status(500).json({ error: error.message });
   }
 };
@@ -177,7 +208,7 @@ exports.rejectConnectionRequest = async (req, res) => {
   }
 };
 
-// Remove connection
+// Remove connection or cancel request
 exports.removeConnection = async (req, res) => {
   try {
     const { connectionId } = req.params;
@@ -195,7 +226,93 @@ exports.removeConnection = async (req, res) => {
     
     await db.query('DELETE FROM CONNECTIONS WHERE CONNECTION_ID = ?', [connectionId]);
     
-    res.json({ message: 'Connection removed' });
+    const message = connection[0].STATUS === 'pending' 
+      ? 'Connection request cancelled' 
+      : 'Connection removed';
+    
+    res.json({ message });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Get connection suggestions (2nd degree connections)
+exports.getConnectionSuggestions = async (req, res) => {
+  try {
+    const userId = req.userId;
+    const { limit = 10 } = req.query;
+    
+    const [suggestions] = await db.query(
+      'CALL GetConnectionSuggestions(?, ?)',
+      [userId, parseInt(limit)]
+    );
+    
+    res.json(suggestions[0]);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Get mutual connections count
+exports.getMutualConnectionsCount = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const currentUserId = req.userId;
+    
+    const [result] = await db.query(
+      'CALL GetMutualConnectionsCount(?, ?)',
+      [currentUserId, userId]
+    );
+    
+    res.json({ mutualCount: result[0][0].mutual_count });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Get connections count
+exports.getConnectionsCount = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    const [result] = await db.query(
+      `SELECT COUNT(*) as count FROM CONNECTIONS 
+       WHERE (REQUEST_ID = ? OR RECEIVER_ID = ?) 
+       AND STATUS = 'accepted'`,
+      [userId, userId]
+    );
+    
+    res.json({ count: result[0].count });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Debug endpoint - check auth
+exports.debugAuth = async (req, res) => {
+  try {
+    const userId = req.userId;
+    
+    // Get all connection data for this user
+    const [sent] = await db.query(
+      `SELECT CONNECTION_ID, RECEIVER_ID, STATUS, REQUESTED_AT 
+       FROM CONNECTIONS WHERE REQUEST_ID = ?`,
+      [userId]
+    );
+    
+    const [received] = await db.query(
+      `SELECT CONNECTION_ID, REQUEST_ID, STATUS, REQUESTED_AT 
+       FROM CONNECTIONS WHERE RECEIVER_ID = ?`,
+      [userId]
+    );
+    
+    res.json({
+      authenticatedUserId: userId,
+      sentRequests: sent,
+      receivedRequests: received,
+      totalSent: sent.length,
+      totalReceived: received.length
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

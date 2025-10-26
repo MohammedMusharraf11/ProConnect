@@ -23,8 +23,8 @@ interface PostCardProps {
 const PostCard = ({ post, onUpdate }: PostCardProps) => {
   const navigate = useNavigate();
   const { userId } = useAuthStore();
-  const [isLiked, setIsLiked] = useState(false);
-  const [likeCount, setLikeCount] = useState(post.LIKE_COUNT || 0);
+  const [isLiked, setIsLiked] = useState(post.isLiked || false);
+  const [likeCount, setLikeCount] = useState(post.LIKES_COUNT || 0);
   const [showComments, setShowComments] = useState(false);
 
   const isOwnPost = userId === post.USER_ID?.toString();
@@ -143,7 +143,7 @@ const PostCard = ({ post, onUpdate }: PostCardProps) => {
         <div className="flex items-center justify-between py-2 text-sm text-muted-foreground border-y border-border">
           <div className="flex items-center space-x-4">
             <span>{likeCount} {likeCount === 1 ? 'like' : 'likes'}</span>
-            <span>{post.COMMENT_COUNT || 0} comments</span>
+            <span>{post.COMMENTS_COUNT || 0} comments</span>
           </div>
         </div>
 

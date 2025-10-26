@@ -1,21 +1,43 @@
 const db = require('../config/database');
 
-// Get all posts (feed)
+// Get all posts (feed) - Exclude current user's posts
 exports.getAllPosts = async (req, res) => {
   try {
     const { page = 1, limit = 20 } = req.query;
     const offset = (page - 1) * limit;
+    const userId = req.userId || req.query.userId; // Support both authenticated and query param
     
-    const [posts] = await db.query(
-      `SELECT p.*, u.F_NAME, u.L_NAME, u.PROFILE_PIC_URL, u.HEADLINE,
-        p.CREATED_AT as createdAt
+    let query = `SELECT p.*, u.F_NAME, u.L_NAME, u.PROFILE_PIC_URL, u.HEADLINE,
+        p.CREATED_AT as createdAt`;
+    
+    // Add isLiked field if user is authenticated
+    if (userId) {
+      query += `,
+        EXISTS(
+          SELECT 1 FROM POST_LIKES pl 
+          WHERE pl.POST_ID = p.POST_ID AND pl.USER_ID = ?
+        ) as isLiked`;
+    }
+    
+    query += `
        FROM POSTS p
        JOIN USERS u ON p.USER_ID = u.USER_ID
-       WHERE u.STATUS = 'active'
+       WHERE u.STATUS = 'active'`;
+    
+    // Exclude current user's posts from feed
+    if (userId) {
+      query += ` AND p.USER_ID != ?`;
+    }
+    
+    query += `
        ORDER BY p.CREATED_AT DESC
-       LIMIT ? OFFSET ?`,
-      [parseInt(limit), parseInt(offset)]
-    );
+       LIMIT ? OFFSET ?`;
+    
+    const params = userId 
+      ? [userId, userId, parseInt(limit), parseInt(offset)]
+      : [parseInt(limit), parseInt(offset)];
+    
+    const [posts] = await db.query(query, params);
     
     res.json(posts);
   } catch (error) {
@@ -159,30 +181,18 @@ exports.togglePostLike = async (req, res) => {
     );
     
     if (existing.length > 0) {
-      // Unlike
+      // Unlike - trigger will handle count decrement
       await db.query(
         'DELETE FROM POST_LIKES WHERE POST_ID = ? AND USER_ID = ?',
         [postId, req.userId]
       );
       
-      // Decrement count
-      await db.query(
-        'UPDATE POSTS SET LIKES_COUNT = LIKES_COUNT - 1 WHERE POST_ID = ?',
-        [postId]
-      );
-      
       res.json({ message: 'Post unliked', liked: false });
     } else {
-      // Like
+      // Like - trigger will handle count increment
       await db.query(
         'INSERT INTO POST_LIKES (POST_ID, USER_ID) VALUES (?, ?)',
         [postId, req.userId]
-      );
-      
-      // Increment count
-      await db.query(
-        'UPDATE POSTS SET LIKES_COUNT = LIKES_COUNT + 1 WHERE POST_ID = ?',
-        [postId]
       );
       
       res.json({ message: 'Post liked', liked: true });
@@ -223,11 +233,7 @@ exports.addComment = async (req, res) => {
       [postId, req.userId, content]
     );
     
-    // Increment comment count
-    await db.query(
-      'UPDATE POSTS SET COMMENTS_COUNT = COMMENTS_COUNT + 1 WHERE POST_ID = ?',
-      [postId]
-    );
+    // Trigger will handle comment count increment
     
     res.status(201).json({
       message: 'Comment added successfully',
@@ -259,14 +265,63 @@ exports.deleteComment = async (req, res) => {
     
     await db.query('DELETE FROM COMMENTS WHERE COMMENT_ID = ?', [commentId]);
     
-    // Decrement comment count
-    await db.query(
-      'UPDATE POSTS SET COMMENTS_COUNT = COMMENTS_COUNT - 1 WHERE POST_ID = ?',
-      [existing[0].POST_ID]
-    );
-    
     res.json({ message: 'Comment deleted successfully' });
   } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Like/Unlike comment
+exports.toggleCommentLike = async (req, res) => {
+  try {
+    const { commentId } = req.params;
+    
+    // Check if already liked
+    const [existing] = await db.query(
+      'SELECT * FROM COMMENT_LIKES WHERE COMMENT_ID = ? AND USER_ID = ?',
+      [commentId, req.userId]
+    );
+    
+    if (existing.length > 0) {
+      // Unlike
+      await db.query(
+        'DELETE FROM COMMENT_LIKES WHERE COMMENT_ID = ? AND USER_ID = ?',
+        [commentId, req.userId]
+      );
+      
+      res.json({ message: 'Comment unliked', liked: false });
+    } else {
+      // Like
+      await db.query(
+        'INSERT INTO COMMENT_LIKES (COMMENT_ID, USER_ID) VALUES (?, ?)',
+        [commentId, req.userId]
+      );
+      
+      res.json({ message: 'Comment liked', liked: true });
+    }
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Get user activity
+exports.getUserActivity = async (req, res) => {
+  try {
+    const userId = req.userId || req.params.userId;
+    const { limit = 50 } = req.query;
+    
+    console.log('Getting activity for user:', userId, 'limit:', limit);
+    
+    const [activities] = await db.query(
+      'CALL GetUserActivity(?, ?)',
+      [userId, parseInt(limit)]
+    );
+    
+    console.log('Found activities:', activities[0]?.length || 0);
+    
+    res.json(activities[0]);
+  } catch (error) {
+    console.error('Error getting user activity:', error);
     res.status(500).json({ error: error.message });
   }
 };

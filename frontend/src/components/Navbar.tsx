@@ -1,5 +1,5 @@
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Home, Users, Search, Bell, User, LogOut, FileText } from 'lucide-react';
+import { Home, Users, Search, Bell, User, LogOut, FileText, Activity } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import {
   DropdownMenu,
@@ -29,7 +29,9 @@ const Navbar = () => {
 
   const navItems = [
     { icon: Home, label: 'Home', path: '/feed' },
-    { icon: Users, label: 'My Network', path: '/my-network' },
+    { icon: Users, label: 'My Network', path: '/connections' },
+    { icon: Search, label: 'People', path: '/people' },
+    { icon: Activity, label: 'Activity', path: '/activity' },
   ];
 
   return (

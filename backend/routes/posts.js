@@ -15,5 +15,10 @@ router.post('/:postId/like', authMiddleware, postsController.togglePostLike);
 router.get('/:postId/comments', postsController.getPostComments);
 router.post('/:postId/comments', authMiddleware, postsController.addComment);
 router.delete('/comments/:commentId', authMiddleware, postsController.deleteComment);
+router.post('/comments/:commentId/like', authMiddleware, postsController.toggleCommentLike);
+
+// User activity
+router.get('/activity/me', authMiddleware, postsController.getUserActivity);
+router.get('/activity/:userId', postsController.getUserActivity);
 
 module.exports = router;

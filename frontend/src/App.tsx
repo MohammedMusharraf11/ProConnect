@@ -8,10 +8,14 @@ import Landing from "./pages/Landing";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Feed from "./pages/Feed";
-import Profile from "./pages/Profile"; // ADD THIS
+import Profile from "./pages/Profile";
+import Connections from "./pages/Connections";
+import Activity from "./pages/Activity";
+import People from "./pages/People";
+import DebugAuth from "./pages/DebugAuth";
 import ProtectedRoute from "./components/ProtectedRoute";
 import NotFound from "./pages/NotFound";
-import ResumeBuilder from "./pages/ResumeBuilder"; // Add this import
+import ResumeBuilder from "./pages/ResumeBuilder";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -34,16 +38,13 @@ const App = () => (
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/feed" element={<ProtectedRoute><Feed /></ProtectedRoute>} />
-          <Route path="/profile/:userId" element={<Profile />} /> {/* ADD THIS */}
+          <Route path="/profile/:userId" element={<Profile />} />
+          <Route path="/connections" element={<ProtectedRoute><Connections /></ProtectedRoute>} />
+          <Route path="/people" element={<ProtectedRoute><People /></ProtectedRoute>} />
+          <Route path="/activity" element={<ProtectedRoute><Activity /></ProtectedRoute>} />
+          <Route path="/resume-builder" element={<ProtectedRoute><ResumeBuilder /></ProtectedRoute>} />
+          <Route path="/debug-auth" element={<ProtectedRoute><DebugAuth /></ProtectedRoute>} />
           <Route path="*" element={<NotFound />} />
-          <Route 
-  path="/resume-builder" 
-  element={
-    <ProtectedRoute>
-      <ResumeBuilder />
-    </ProtectedRoute>
-  } 
-/>
         </Routes>
       </BrowserRouter>
     </TooltipProvider>

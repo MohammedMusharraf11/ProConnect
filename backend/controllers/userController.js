@@ -97,13 +97,18 @@ exports.searchUsers = async (req, res) => {
 // Get all users
 exports.getAllUsers = async (req, res) => {
   try {
+    console.log('Getting all users...');
     const [users] = await db.query(
       `SELECT USER_ID, EMAIL, F_NAME, L_NAME, HEADLINE, 
-       PROFILE_PIC_URL, CITY, COUNTRY 
-       FROM USERS WHERE STATUS = 'active' LIMIT 100`
+       PROFILE_PIC_URL, CITY, COUNTRY, INDUSTRY 
+       FROM USERS WHERE STATUS = 'active' 
+       ORDER BY CREATED_AT DESC 
+       LIMIT 100`
     );
+    console.log('Found users:', users.length);
     res.json(users);
   } catch (error) {
+    console.error('Error getting all users:', error);
     res.status(500).json({ error: error.message });
   }
 };
