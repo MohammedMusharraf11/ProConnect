@@ -6,7 +6,7 @@ exports.getUserProfile = async (req, res) => {
     const { userId } = req.params;
     
     const [users] = await db.query(
-      `SELECT USER_ID, EMAIL, F_NAME, L_NAME, DOB, INDUSTRY, 
+      `SELECT USER_ID, EMAIL, F_NAME, L_NAME, PHONE, DOB, INDUSTRY, 
        PROFILE_PIC_URL, COUNTRY, CITY, BIO, HEADLINE, STATUS, 
        CREATED_AT, UPDATED_AT 
        FROM USERS WHERE USER_ID = ?`,
@@ -17,7 +17,18 @@ exports.getUserProfile = async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
     
-    res.json(users[0]);
+    // Get connection count
+    const [connectionCount] = await db.query(
+      `SELECT COUNT(*) as count FROM CONNECTIONS 
+       WHERE (REQUEST_ID = ? OR RECEIVER_ID = ?) 
+       AND STATUS = 'accepted'`,
+      [userId, userId]
+    );
+    
+    const user = users[0];
+    user.connectionCount = connectionCount[0].count;
+    
+    res.json(user);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -30,6 +41,7 @@ exports.updateUserProfile = async (req, res) => {
     const {
       firstName,
       lastName,
+      phone,
       dob,
       industry,
       profilePicUrl,
@@ -46,11 +58,11 @@ exports.updateUserProfile = async (req, res) => {
     
     await db.query(
       `UPDATE USERS SET 
-       F_NAME = ?, L_NAME = ?, DOB = ?, INDUSTRY = ?,
+       F_NAME = ?, L_NAME = ?, PHONE = ?, DOB = ?, INDUSTRY = ?,
        PROFILE_PIC_URL = ?, COUNTRY = ?, CITY = ?, BIO = ?,
        HEADLINE = ?, UPDATED_AT = NOW()
        WHERE USER_ID = ?`,
-      [firstName, lastName, dob, industry, profilePicUrl, country, city, bio, headline, userId]
+      [firstName, lastName, phone, dob, industry, profilePicUrl, country, city, bio, headline, userId]
     );
     
     res.json({ message: 'Profile updated successfully' });

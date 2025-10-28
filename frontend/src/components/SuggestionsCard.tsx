@@ -13,13 +13,59 @@ const SuggestionsCard = () => {
   const { userId } = useAuthStore();
   const queryClient = useQueryClient();
 
-  const { data: suggestions, isLoading } = useQuery({
-    queryKey: ['suggestions'],
+  // Get existing connections
+  const { data: connections } = useQuery({
+    queryKey: ['connections', userId],
     queryFn: async () => {
-      const { data } = await api.get('/users');
-      // Filter out current user
-      return data.filter((user: any) => user.USER_ID?.toString() !== userId).slice(0, 5);
+      const { data } = await api.get(`/connections/${userId}`);
+      return data;
     },
+    enabled: !!userId,
+  });
+
+  // Get pending sent requests
+  const { data: sentRequests } = useQuery({
+    queryKey: ['sentRequests'],
+    queryFn: async () => {
+      const { data } = await api.get('/connections/sent');
+      return data;
+    },
+    enabled: !!userId,
+  });
+
+  const { data: suggestions, isLoading } = useQuery({
+    queryKey: ['suggestions', userId, connections, sentRequests],
+    queryFn: async () => {
+      const { data } = await api.get('/users/all');
+      
+      // Get IDs of connected users
+      const connectedIds = new Set(
+        connections?.map((conn: any) => conn.USER_ID?.toString()) || []
+      );
+      
+      // Get IDs of users with pending requests
+      const pendingIds = new Set(
+        sentRequests?.map((req: any) => req.USER_ID?.toString()) || []
+      );
+      
+      // Remove duplicates by USER_ID
+      const uniqueUsers = Array.from(
+        new Map(data.map((user: any) => [user.USER_ID, user])).values()
+      );
+      
+      // Filter out current user, connected users, and pending requests
+      const filtered = uniqueUsers
+        .filter((user: any) => {
+          const userIdStr = user.USER_ID?.toString();
+          return userIdStr !== userId?.toString() && 
+                 !connectedIds.has(userIdStr) &&
+                 !pendingIds.has(userIdStr);
+        })
+        .slice(0, 5);
+      
+      return filtered;
+    },
+    enabled: !!userId && connections !== undefined && sentRequests !== undefined,
   });
 
   const connectMutation = useMutation({
@@ -37,22 +83,26 @@ const SuggestionsCard = () => {
 
   if (isLoading) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">People you may know</CardTitle>
+      <Card className="overflow-hidden">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base font-semibold">People you may know</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <Skeleton className="h-12 w-12 rounded-full" />
-                <div className="space-y-2">
-                  <Skeleton className="h-4 w-24" />
-                  <Skeleton className="h-3 w-32" />
+        <CardContent className="p-0">
+          <div className="divide-y divide-border">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="p-4">
+                <div className="flex items-center gap-3">
+                  <Skeleton className="h-12 w-12 rounded-full" />
+                  <div className="flex-1 space-y-2">
+                    <Skeleton className="h-4 w-32" />
+                    <Skeleton className="h-3 w-full max-w-[200px]" />
+                    <Skeleton className="h-3 w-24" />
+                  </div>
+                  <Skeleton className="h-8 w-20" />
                 </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </CardContent>
       </Card>
     );
@@ -63,45 +113,70 @@ const SuggestionsCard = () => {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">People you may know</CardTitle>
+    <Card className="overflow-hidden">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base font-semibold">People you may know</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
-        {suggestions.map((user: any) => (
-          <div key={user.USER_ID} className="flex items-start justify-between">
+      <CardContent className="p-0">
+        <div className="divide-y divide-border">
+          {suggestions.map((user: any) => (
             <div 
-              className="flex items-start space-x-3 cursor-pointer flex-1"
-              onClick={() => navigate(`/profile/${user.USER_ID}`)}
+              key={user.USER_ID} 
+              className="p-4 hover:bg-muted/50 transition-colors"
             >
-              <Avatar className="h-12 w-12">
-                <AvatarImage src={user.PROFILE_PIC_URL} />
-                <AvatarFallback className="bg-primary text-primary-foreground">
-                  {user.F_NAME?.[0]}{user.L_NAME?.[0]}
-                </AvatarFallback>
-              </Avatar>
-              <div className="flex-1 min-w-0">
-                <p className="font-semibold text-sm hover:text-primary truncate">
-                  {user.F_NAME} {user.L_NAME}
-                </p>
-                {user.HEADLINE && (
-                  <p className="text-xs text-muted-foreground line-clamp-2">
-                    {user.HEADLINE}
+              <div className="flex items-center gap-3">
+                <Avatar 
+                  className="h-12 w-12 cursor-pointer ring-2 ring-transparent hover:ring-primary/20 transition-all"
+                  onClick={() => navigate(`/profile/${user.USER_ID}`)}
+                >
+                  <AvatarImage src={user.PROFILE_PIC_URL} />
+                  <AvatarFallback className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground font-semibold">
+                    {user.F_NAME?.[0]}{user.L_NAME?.[0]}
+                  </AvatarFallback>
+                </Avatar>
+                
+                <div 
+                  className="flex-1 min-w-0 cursor-pointer"
+                  onClick={() => navigate(`/profile/${user.USER_ID}`)}
+                >
+                  <p className="font-semibold text-sm hover:text-primary transition-colors truncate">
+                    {user.F_NAME} {user.L_NAME}
                   </p>
-                )}
+                  {user.HEADLINE ? (
+                    <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">
+                      {user.HEADLINE}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground/60 italic">
+                      No headline
+                    </p>
+                  )}
+                  {(user.CITY || user.INDUSTRY) && (
+                    <p className="text-xs text-muted-foreground/80 mt-1">
+                      {user.CITY && user.INDUSTRY 
+                        ? `${user.CITY} • ${user.INDUSTRY}`
+                        : user.CITY || user.INDUSTRY
+                      }
+                    </p>
+                  )}
+                </div>
+                
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    connectMutation.mutate(user.USER_ID.toString());
+                  }}
+                  disabled={connectMutation.isPending}
+                  className="shrink-0 hover:bg-primary hover:text-primary-foreground transition-colors"
+                >
+                  Connect
+                </Button>
               </div>
             </div>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => connectMutation.mutate(user.USER_ID.toString())}
-              disabled={connectMutation.isPending}
-              className="ml-2 shrink-0"
-            >
-              Connect
-            </Button>
-          </div>
-        ))}
+          ))}
+        </div>
       </CardContent>
     </Card>
   );

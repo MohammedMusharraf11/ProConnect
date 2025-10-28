@@ -25,6 +25,8 @@ import ExperienceModal from "@/components/modals/ExperienceModal";
 import EducationModal from "@/components/modals/EducationModal";
 import SkillModal from "@/components/modals/SkillModal";
 import ProjectModal from "@/components/modals/ProjectModal";
+import EditProfileModal from "@/components/modals/EditProfileModal";
+import PostCard from "@/components/PostCard";
 
 const api = axios.create({
   baseURL: "http://localhost:5000/api",
@@ -49,6 +51,7 @@ const Profile = () => {
   const [educationModal, setEducationModal] = useState({ open: false, data: null });
   const [skillModal, setSkillModal] = useState({ open: false, data: null });
   const [projectModal, setProjectModal] = useState({ open: false, data: null });
+  const [editProfileModal, setEditProfileModal] = useState(false);
 
   // Fetch queries
   const { data: user, isLoading: loadingUser } = useQuery({
@@ -87,6 +90,14 @@ const Profile = () => {
     queryKey: ["projects", userId],
     queryFn: async () => {
       const { data } = await api.get(`/projects/user/${userId}`);
+      return data;
+    },
+  });
+
+  const { data: userPosts, isLoading: loadingPosts, refetch: refetchPosts } = useQuery({
+    queryKey: ["userPosts", userId],
+    queryFn: async () => {
+      const { data } = await api.get(`/posts/user/${userId}`);
       return data;
     },
   });
@@ -190,7 +201,7 @@ const Profile = () => {
                   </div>
                   
                   {isOwnProfile && (
-                    <Button className="mt-4 md:mt-0">
+                    <Button className="mt-4 md:mt-0" onClick={() => setEditProfileModal(true)}>
                       <Edit className="h-4 w-4 mr-2" />
                       Edit Profile
                     </Button>
@@ -202,13 +213,44 @@ const Profile = () => {
         </Card>
 
         {/* About Section */}
-        {user?.BIO && (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle>About</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {user?.BIO && (
+              <p className="text-gray-700 whitespace-pre-wrap">{user.BIO}</p>
+            )}
+            {user?.PHONE && (
+              <div className="flex items-center gap-2 text-sm">
+                <span className="font-semibold">Phone:</span>
+                <span className="text-gray-600">{user.PHONE}</span>
+              </div>
+            )}
+            {!user?.BIO && !user?.PHONE && (
+              <p className="text-gray-500 text-center py-4">No information added yet</p>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Activity/Posts Section - Show for own profile */}
+        {isOwnProfile && (
           <Card className="mb-6">
             <CardHeader>
-              <CardTitle>About</CardTitle>
+              <CardTitle>Activity</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-gray-700 whitespace-pre-wrap">{user.BIO}</p>
+              {loadingPosts ? (
+                <div className="text-center py-4">Loading...</div>
+              ) : userPosts?.length > 0 ? (
+                <div className="space-y-4">
+                  {userPosts.map((post: any) => (
+                    <PostCard key={post.POST_ID} post={post} onUpdate={refetchPosts} />
+                  ))}
+                </div>
+              ) : (
+                <p className="text-gray-500 text-center py-4">No posts yet. Share your first post!</p>
+              )}
             </CardContent>
           </Card>
         )}
@@ -488,9 +530,16 @@ const Profile = () => {
             )}
           </CardContent>
         </Card>
+
       </div>
 
       {/* Modals */}
+      <EditProfileModal
+        open={editProfileModal}
+        onClose={() => setEditProfileModal(false)}
+        user={user}
+        userId={userId!}
+      />
       <ExperienceModal
         open={experienceModal.open}
         onClose={() => setExperienceModal({ open: false, data: null })}

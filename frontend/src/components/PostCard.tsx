@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { formatDistanceToNow } from 'date-fns';
-import { ThumbsUp, MessageCircle, Share2, MoreHorizontal, Trash2 } from 'lucide-react';
+import { ThumbsUp, MessageCircle, Share2, MoreHorizontal, Trash2, Send } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { Separator } from '@/components/ui/separator';
 import { useAuthStore } from '@/stores/authStore';
 import { useNavigate } from 'react-router-dom';
 import api from '@/lib/axios';
@@ -22,12 +24,37 @@ interface PostCardProps {
 
 const PostCard = ({ post, onUpdate }: PostCardProps) => {
   const navigate = useNavigate();
-  const { userId } = useAuthStore();
+  const { userId, user } = useAuthStore();
   const [isLiked, setIsLiked] = useState(post.isLiked || false);
   const [likeCount, setLikeCount] = useState(post.LIKES_COUNT || 0);
   const [showComments, setShowComments] = useState(false);
+  const [comments, setComments] = useState<any[]>([]);
+  const [commentText, setCommentText] = useState('');
+  const [loadingComments, setLoadingComments] = useState(false);
+  const [submittingComment, setSubmittingComment] = useState(false);
 
   const isOwnPost = userId === post.USER_ID?.toString();
+
+  useEffect(() => {
+    if (showComments) {
+      loadComments();
+    }
+  }, [showComments]);
+
+  const loadComments = async () => {
+    setLoadingComments(true);
+    try {
+      const { data } = await api.get(`/posts/${post.POST_ID}/comments`);
+      console.log('Loaded comments:', data);
+      setComments(data || []);
+    } catch (error) {
+      console.error('Failed to load comments:', error);
+      toast.error('Failed to load comments');
+      setComments([]);
+    } finally {
+      setLoadingComments(false);
+    }
+  };
 
   const handleLike = async () => {
     try {
@@ -48,6 +75,36 @@ const PostCard = ({ post, onUpdate }: PostCardProps) => {
       onUpdate();
     } catch (error) {
       toast.error('Failed to delete post');
+    }
+  };
+
+  const handleAddComment = async () => {
+    if (!commentText.trim()) return;
+
+    setSubmittingComment(true);
+    try {
+      await api.post(`/posts/${post.POST_ID}/comments`, { content: commentText });
+      setCommentText('');
+      await loadComments();
+      toast.success('Comment added!');
+      onUpdate(); // Refresh to update comment count
+    } catch (error) {
+      toast.error('Failed to add comment');
+    } finally {
+      setSubmittingComment(false);
+    }
+  };
+
+  const handleDeleteComment = async (commentId: number) => {
+    if (!confirm('Delete this comment?')) return;
+
+    try {
+      await api.delete(`/posts/comments/${commentId}`);
+      await loadComments();
+      toast.success('Comment deleted');
+      onUpdate();
+    } catch (error) {
+      toast.error('Failed to delete comment');
     }
   };
 
@@ -167,11 +224,110 @@ const PostCard = ({ post, onUpdate }: PostCardProps) => {
             <MessageCircle className="h-5 w-5 mr-2" />
             Comment
           </Button>
-          <Button variant="ghost" size="sm" className="text-muted-foreground">
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            className="text-muted-foreground"
+            onClick={() => {
+              const postUrl = `${window.location.origin}/post/${post.POST_ID}`;
+              navigator.clipboard.writeText(postUrl);
+              toast.success('Post link copied to clipboard!');
+            }}
+          >
             <Share2 className="h-5 w-5 mr-2" />
             Share
           </Button>
         </div>
+
+        {/* Comments Section */}
+        {showComments && (
+          <>
+            <Separator className="my-4" />
+            <div className="space-y-4">
+              {/* Add Comment */}
+              <div className="flex gap-2">
+                <Avatar className="h-8 w-8">
+                  <AvatarImage src={user?.profilePicUrl} />
+                  <AvatarFallback className="bg-primary text-primary-foreground text-xs">
+                    {user?.firstName?.[0]}{user?.lastName?.[0]}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex-1 flex gap-2">
+                  <Textarea
+                    placeholder="Write a comment..."
+                    value={commentText}
+                    onChange={(e) => setCommentText(e.target.value)}
+                    className="min-h-[60px]"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleAddComment();
+                      }
+                    }}
+                  />
+                  <Button 
+                    size="sm" 
+                    onClick={handleAddComment}
+                    disabled={!commentText.trim() || submittingComment}
+                  >
+                    <Send className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+
+              {/* Comments List */}
+              {loadingComments ? (
+                <div className="text-center py-4 text-sm text-muted-foreground">
+                  Loading comments...
+                </div>
+              ) : comments.length > 0 ? (
+                <div className="space-y-3">
+                  {comments.map((comment) => (
+                    <div key={comment.COMMENT_ID} className="flex gap-2">
+                      <Avatar 
+                        className="h-8 w-8 cursor-pointer"
+                        onClick={() => navigate(`/profile/${comment.USER_ID}`)}
+                      >
+                        <AvatarImage src={comment.PROFILE_PIC_URL} />
+                        <AvatarFallback className="bg-primary text-primary-foreground text-xs">
+                          {comment.F_NAME?.[0]}{comment.L_NAME?.[0]}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1">
+                        <div className="bg-muted rounded-lg px-3 py-2">
+                          <p 
+                            className="font-semibold text-sm cursor-pointer hover:text-primary"
+                            onClick={() => navigate(`/profile/${comment.USER_ID}`)}
+                          >
+                            {comment.F_NAME} {comment.L_NAME}
+                          </p>
+                          <p className="text-sm">{comment.CONTENT}</p>
+                        </div>
+                        <div className="flex items-center gap-3 mt-1 px-3">
+                          <span className="text-xs text-muted-foreground">
+                            {formatDistanceToNow(new Date(comment.CREATED_AT), { addSuffix: true })}
+                          </span>
+                          {userId === comment.USER_ID?.toString() && (
+                            <button
+                              onClick={() => handleDeleteComment(comment.COMMENT_ID)}
+                              className="text-xs text-destructive hover:underline"
+                            >
+                              Delete
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-4 text-sm text-muted-foreground">
+                  No comments yet. Be the first to comment!
+                </div>
+              )}
+            </div>
+          </>
+        )}
       </CardContent>
     </Card>
   );
