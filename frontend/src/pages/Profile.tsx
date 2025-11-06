@@ -27,6 +27,8 @@ import SkillModal from "@/components/modals/SkillModal";
 import ProjectModal from "@/components/modals/ProjectModal";
 import EditProfileModal from "@/components/modals/EditProfileModal";
 import PostCard from "@/components/PostCard";
+import UserStatsCard from "@/components/UserStatsCard";
+import ProfileCompletenessCard from "@/components/ProfileCompletenessCard";
 
 const api = axios.create({
   baseURL: "http://localhost:5000/api",
@@ -212,8 +214,25 @@ const Profile = () => {
           </CardContent>
         </Card>
 
+        {/* User Stats Card */}
+        <UserStatsCard 
+          connectionCount={user?.connectionCount || 0}
+          postCount={user?.postCount || 0}
+          profileCompleteness={user?.profileCompleteness || 0}
+        />
+
+        {/* Profile Completeness - Only show on own profile */}
+        {isOwnProfile && user?.profileCompleteness < 100 && (
+          <div className="mt-6">
+            <ProfileCompletenessCard 
+              completeness={user?.profileCompleteness || 0}
+              user={user}
+            />
+          </div>
+        )}
+
         {/* About Section */}
-        <Card className="mb-6">
+        <Card className="mb-6 mt-6">
           <CardHeader>
             <CardTitle>About</CardTitle>
           </CardHeader>

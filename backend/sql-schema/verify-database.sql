@@ -52,6 +52,7 @@ SELECT
     LAST_ALTERED
 FROM information_schema.ROUTINES 
 WHERE ROUTINE_SCHEMA = 'professional_network'
+AND ROUTINE_TYPE = 'PROCEDURE'
 ORDER BY ROUTINE_NAME;
 
 -- Expected Procedures:
@@ -59,6 +60,29 @@ ORDER BY ROUTINE_NAME;
 -- 2. GetUserActivity
 -- 3. GetMutualConnectionsCount
 -- 4. GetConnectionSuggestions
+
+-- ============================================
+-- CHECK FUNCTIONS
+-- ============================================
+SELECT 'Checking Functions...' as status;
+
+SELECT 
+    ROUTINE_NAME,
+    ROUTINE_TYPE,
+    CREATED,
+    LAST_ALTERED
+FROM information_schema.ROUTINES 
+WHERE ROUTINE_SCHEMA = 'professional_network'
+AND ROUTINE_TYPE = 'FUNCTION'
+ORDER BY ROUTINE_NAME;
+
+-- Expected Functions:
+-- 1. GetConnectionCount
+-- 2. GetPostCount
+-- 3. GetMutualConnectionCount
+-- 4. IsConnected
+-- 5. GetUserFullName
+-- 6. CalculateProfileCompleteness
 
 -- ============================================
 -- CHECK USER_ACTIVITY TABLE
@@ -93,7 +117,15 @@ WHERE TRIGGER_SCHEMA = 'professional_network';
 SELECT COUNT(*) as procedure_count,
        'Expected: 4' as expected
 FROM information_schema.ROUTINES 
-WHERE ROUTINE_SCHEMA = 'professional_network';
+WHERE ROUTINE_SCHEMA = 'professional_network'
+AND ROUTINE_TYPE = 'PROCEDURE';
+
+-- Count functions
+SELECT COUNT(*) as function_count,
+       'Expected: 6' as expected
+FROM information_schema.ROUTINES 
+WHERE ROUTINE_SCHEMA = 'professional_network'
+AND ROUTINE_TYPE = 'FUNCTION';
 
 -- Check if PHONE field exists
 SELECT 

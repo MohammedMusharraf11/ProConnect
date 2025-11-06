@@ -8,7 +8,10 @@ exports.getUserProfile = async (req, res) => {
     const [users] = await db.query(
       `SELECT USER_ID, EMAIL, F_NAME, L_NAME, PHONE, DOB, INDUSTRY, 
        PROFILE_PIC_URL, COUNTRY, CITY, BIO, HEADLINE, STATUS, 
-       CREATED_AT, UPDATED_AT 
+       CREATED_AT, UPDATED_AT,
+       GetConnectionCount(USER_ID) as connectionCount,
+       GetPostCount(USER_ID) as postCount,
+       CalculateProfileCompleteness(USER_ID) as profileCompleteness
        FROM USERS WHERE USER_ID = ?`,
       [userId]
     );
@@ -17,18 +20,7 @@ exports.getUserProfile = async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
     
-    // Get connection count
-    const [connectionCount] = await db.query(
-      `SELECT COUNT(*) as count FROM CONNECTIONS 
-       WHERE (REQUEST_ID = ? OR RECEIVER_ID = ?) 
-       AND STATUS = 'accepted'`,
-      [userId, userId]
-    );
-    
-    const user = users[0];
-    user.connectionCount = connectionCount[0].count;
-    
-    res.json(user);
+    res.json(users[0]);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -75,11 +67,19 @@ exports.updateUserProfile = async (req, res) => {
 exports.searchUsers = async (req, res) => {
   try {
     const { query, industry, city } = req.query;
+    const currentUserId = req.userId;
     
     let sql = `SELECT USER_ID, EMAIL, F_NAME, L_NAME, HEADLINE, 
-               PROFILE_PIC_URL, CITY, COUNTRY, INDUSTRY 
-               FROM USERS WHERE STATUS = 'active'`;
-    const params = [];
+               PROFILE_PIC_URL, CITY, COUNTRY, INDUSTRY,
+               GetConnectionCount(USER_ID) as connectionCount`;
+    
+    // Add connection status if user is logged in
+    if (currentUserId) {
+      sql += `, IsConnected(?, USER_ID) as connectionStatus`;
+    }
+    
+    sql += ` FROM USERS WHERE STATUS = 'active'`;
+    const params = currentUserId ? [currentUserId] : [];
     
     if (query) {
       sql += ` AND (F_NAME LIKE ? OR L_NAME LIKE ? OR HEADLINE LIKE ?)`;
@@ -110,17 +110,49 @@ exports.searchUsers = async (req, res) => {
 exports.getAllUsers = async (req, res) => {
   try {
     console.log('Getting all users...');
-    const [users] = await db.query(
-      `SELECT USER_ID, EMAIL, F_NAME, L_NAME, HEADLINE, 
-       PROFILE_PIC_URL, CITY, COUNTRY, INDUSTRY 
-       FROM USERS WHERE STATUS = 'active' 
+    const currentUserId = req.userId;
+    
+    let sql = `SELECT USER_ID, EMAIL, F_NAME, L_NAME, HEADLINE, 
+       PROFILE_PIC_URL, CITY, COUNTRY, INDUSTRY,
+       GetConnectionCount(USER_ID) as connectionCount`;
+    
+    // Add connection status if user is logged in
+    if (currentUserId) {
+      sql += `, IsConnected(?, USER_ID) as connectionStatus`;
+    }
+    
+    sql += ` FROM USERS WHERE STATUS = 'active' 
        ORDER BY CREATED_AT DESC 
-       LIMIT 100`
-    );
+       LIMIT 100`;
+    
+    const params = currentUserId ? [currentUserId] : [];
+    const [users] = await db.query(sql, params);
+    
     console.log('Found users:', users.length);
     res.json(users);
   } catch (error) {
     console.error('Error getting all users:', error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Get user stats (using functions)
+exports.getUserStats = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    const [stats] = await db.query(
+      `SELECT 
+        GetConnectionCount(?) as connectionCount,
+        GetPostCount(?) as postCount,
+        CalculateProfileCompleteness(?) as profileCompleteness,
+        GetUserFullName(?) as fullName
+      FROM DUAL`,
+      [userId, userId, userId, userId]
+    );
+    
+    res.json(stats[0]);
+  } catch (error) {
     res.status(500).json({ error: error.message });
   }
 };

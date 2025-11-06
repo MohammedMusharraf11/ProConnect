@@ -159,6 +159,11 @@ const SuggestionsCard = () => {
                       }
                     </p>
                   )}
+                  {user.connectionCount > 0 && (
+                    <p className="text-xs text-muted-foreground/60 mt-0.5">
+                      {user.connectionCount} {user.connectionCount === 1 ? 'connection' : 'connections'}
+                    </p>
+                  )}
                 </div>
                 
                 <Button

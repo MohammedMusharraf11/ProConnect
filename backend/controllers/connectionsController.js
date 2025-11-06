@@ -4,18 +4,30 @@ const db = require('../config/database');
 exports.getUserConnections = async (req, res) => {
   try {
     const { userId } = req.params;
+    const currentUserId = req.userId;
     
-    const [connections] = await db.query(
-      `SELECT u.USER_ID, u.F_NAME, u.L_NAME, u.HEADLINE, 
-       u.PROFILE_PIC_URL, u.CITY, u.COUNTRY, c.ACCEPTED_AT
+    let sql = `SELECT u.USER_ID, u.F_NAME, u.L_NAME, u.HEADLINE, 
+       u.PROFILE_PIC_URL, u.CITY, u.COUNTRY, c.ACCEPTED_AT,
+       GetConnectionCount(u.USER_ID) as connectionCount`;
+    
+    // Add mutual connections count if viewing someone else's connections
+    if (currentUserId && currentUserId !== parseInt(userId)) {
+      sql += `, GetMutualConnectionCount(?, u.USER_ID) as mutualConnections`;
+    }
+    
+    sql += `
        FROM CONNECTIONS c
        JOIN USERS u ON (c.RECEIVER_ID = u.USER_ID OR c.REQUEST_ID = u.USER_ID)
        WHERE (c.REQUEST_ID = ? OR c.RECEIVER_ID = ?)
        AND c.STATUS = 'accepted'
        AND u.USER_ID != ?
-       ORDER BY c.ACCEPTED_AT DESC`,
-      [userId, userId, userId]
-    );
+       ORDER BY c.ACCEPTED_AT DESC`;
+    
+    const params = currentUserId && currentUserId !== parseInt(userId)
+      ? [currentUserId, userId, userId, userId]
+      : [userId, userId, userId];
+    
+    const [connections] = await db.query(sql, params);
     
     res.json(connections);
   } catch (error) {
@@ -259,12 +271,13 @@ exports.getMutualConnectionsCount = async (req, res) => {
     const { userId } = req.params;
     const currentUserId = req.userId;
     
+    // Use function instead of procedure
     const [result] = await db.query(
-      'CALL GetMutualConnectionsCount(?, ?)',
+      'SELECT GetMutualConnectionCount(?, ?) as mutualCount',
       [currentUserId, userId]
     );
     
-    res.json({ mutualCount: result[0][0].mutual_count });
+    res.json({ mutualCount: result[0].mutualCount });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
